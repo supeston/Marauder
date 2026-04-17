@@ -3,992 +3,711 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Marauder — Control Panel</title>
+    <title>ESP32 Marauder — Terminal</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg: #0b0f12;
-            --card: #131a22;
-            --border: #25313e;
+            --card: #111920;
+            --border: #1e2d3a;
             --fg: #e3e9f2;
-            --muted: #9aafc4;
-            --btn: #252f3a;
-            --btn-hover: #30475a;
-            --accent: #6b8299;
-            --console-bg: #0a0d10;
-            --radius: 16px;
-            --font-ui: 'Space Grotesk', sans-serif;
+            --muted: #c8d3de;
+            --accent: #6b8aa4;
+            --console-bg: #080c0f;
             --font-mono: 'JetBrains Mono', monospace;
         }
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:var(--font-mono);background:var(--bg);background-image:radial-gradient(ellipse at 50% -10%,rgba(30,45,58,0.3) 0%,transparent 60%);color:var(--fg);min-height:100vh;display:flex;flex-direction:column}
+        ::-webkit-scrollbar{width:5px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+        ::-webkit-scrollbar-thumb:hover{background:var(--accent)}
 
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        header{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;background:var(--card);border-bottom:1px solid var(--border);flex-shrink:0}
+        .h-left{display:flex;align-items:center;gap:14px}
+        .h-icon{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--accent);font-size:14px}
+        .h-title{font-size:14px;font-weight:600;letter-spacing:-0.3px}
+        .h-sub{font-size:10px;color:var(--border);letter-spacing:1.2px;text-transform:uppercase}
+        .h-right{display:flex;align-items:center;gap:14px}
+        .status{display:flex;align-items:center;gap:8px}
+        .dot{width:7px;height:7px;border-radius:50%;background:var(--border);transition:all .3s}
+        .dot.on{background:var(--accent);box-shadow:0 0 10px rgba(107,138,164,0.5)}
+        .status-txt{font-size:11px;color:var(--muted)}
+        .conn-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:var(--accent);color:#0b0f12;border:none;border-radius:10px;font-family:var(--font-mono);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;outline:none}
+        .conn-btn:hover{background:#7d9bb5}
+        .conn-btn:active{transform:scale(0.97)}
+        .conn-btn:disabled{opacity:.3;cursor:not-allowed}
+        .conn-btn i{font-size:11px}
 
-        body {
-            font-family: var(--font-ui);
-            background: var(--bg);
-            background-image: radial-gradient(ellipse at 50% 0%, rgba(37,49,62,0.25) 0%, transparent 55%);
-            color: var(--fg);
-            min-height: 100vh;
-            line-height: 1.5;
+        .terminal{flex:1;display:flex;flex-direction:column;margin:16px;background:var(--console-bg);border:1px solid var(--border);border-radius:14px;overflow:hidden;min-height:0}
+        .output{flex:1;padding:16px 18px;overflow-y:auto;font-size:12.5px;line-height:1.8;color:var(--fg);white-space:pre-wrap;word-break:break-all;min-height:0}
+        .line{}
+        .line.cmd{color:#fff}
+        .line.cmd::before{content:'> ';color:var(--accent)}
+        .line.err{color:#c45454}
+        .line.info{color:var(--accent);font-style:italic}
+        .line.typing{color:var(--muted)}
+
+        .input-wrap{position:relative;flex-shrink:0}
+        .input-line{display:flex;align-items:center;padding:12px 18px;border-top:1px solid var(--border);background:rgba(17,25,32,0.6)}
+        .prompt{color:var(--accent);font-size:12.5px;font-weight:500;margin-right:10px;white-space:nowrap;user-select:none}
+        .term-input{flex:1;background:transparent;color:var(--fg);border:none;outline:none;font-family:var(--font-mono);font-size:12.5px;caret-color:var(--accent)}
+        .term-input::placeholder{color:#1a2633}
+        .ghost{position:absolute;left:0;top:0;pointer-events:none;overflow:hidden;height:100%;display:flex;align-items:center}
+        .ghost-text{color:rgba(107,138,164,0.3);font-family:var(--font-mono);font-size:12.5px;white-space:pre}
+
+        /* Автодополнение — выпадающий список */
+        .autocomplete{position:absolute;left:0;bottom:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:5px 0;max-height:220px;overflow-y:auto;display:none;z-index:10;box-shadow:0 -8px 30px rgba(0,0,0,0.4);min-width:280px}
+        .autocomplete.show{display:block}
+        .ac-item{padding:6px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--muted);transition:background .1s}
+        .ac-item:hover,.ac-item.active{background:var(--bg);color:var(--fg)}
+        .ac-item.active{background:var(--bg)}
+        .ac-cmd{color:var(--fg);font-weight:500;flex:1}
+        .ac-desc{color:#3a5060;font-size:11px;white-space:nowrap}
+        .ac-sep{height:1px;background:var(--border);margin:4px 0}
+
+        .warn{display:none;padding:14px 20px;background:#1a1508;border:1px solid #2e2410;border-radius:14px;margin:16px;font-size:12px;color:#b89830;align-items:flex-start;gap:12px;line-height:1.6;font-family:var(--font-mono)}
+        .warn.show{display:flex}
+        .warn i{font-size:16px;flex-shrink:0;margin-top:2px}
+        .warn strong{color:#d4b030}
+
+        .toasts{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+        .toast{padding:9px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;font-size:12px;font-family:var(--font-mono);color:var(--fg);display:flex;align-items:center;gap:8px;box-shadow:0 8px 28px rgba(0,0,0,0.5);animation:tIn .25s ease}
+        .toast.out{animation:tOut .25s ease forwards}
+        .toast i{color:var(--accent);font-size:13px;flex-shrink:0}
+        @keyframes tIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+        @keyframes tOut{to{opacity:0;transform:translateY(10px)}}
+
+        footer{text-align:center;padding:12px 16px 20px;font-size:10px;color:#141e28;font-family:var(--font-mono);flex-shrink:0}
+        footer span{color:var(--muted)}
+
+        @media(max-width:640px){
+            header{padding:12px 14px}
+            .h-title{font-size:13px}
+            .terminal{margin:8px}
+            .output{padding:12px 14px;font-size:11.5px}
+            .input-line{padding:10px 14px}
+            .warn{margin:8px}
+            .autocomplete{min-width:200px}
         }
-
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
-
-        .container {
-            max-width: 1080px;
-            margin: 0 auto;
-            padding: 20px 16px;
-        }
-
-        /* === Header === */
-        header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 14px 22px;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            margin-bottom: 14px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .header-icon {
-            width: 36px; height: 36px;
-            display: flex; align-items: center; justify-content: center;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            color: var(--muted);
-            font-size: 15px;
-        }
-
-        .header-title { font-size: 17px; font-weight: 700; letter-spacing: -0.4px; }
-        .header-sub { font-size: 11px; color: var(--border); font-weight: 400; letter-spacing: 0.3px; }
-
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .status-indicator {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .status-dot {
-            width: 9px; height: 9px;
-            border-radius: 50%;
-            background: var(--border);
-            transition: background 0.35s, box-shadow 0.35s;
-            flex-shrink: 0;
-        }
-
-        .status-dot.on {
-            background: var(--accent);
-            box-shadow: 0 0 10px rgba(107,130,153,0.45);
-        }
-
-        .status-label {
-            font-size: 12px;
-            font-family: var(--font-mono);
-            color: var(--muted);
-            white-space: nowrap;
-        }
-
-        /* === Buttons === */
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 9px 16px;
-            background: var(--btn);
-            color: var(--fg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            font-family: var(--font-ui);
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.18s, border-color 0.18s, transform 0.1s;
-            white-space: nowrap;
-            user-select: none;
-            outline: none;
-        }
-
-        .btn:hover { background: var(--btn-hover); border-color: var(--accent); }
-        .btn:active { transform: scale(0.97); }
-        .btn:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
-        .btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
-
-        .btn i { font-size: 13px; color: var(--muted); transition: color 0.18s; }
-        .btn:hover i { color: var(--fg); }
-
-        .btn-accent {
-            background: var(--border);
-            border-color: var(--accent);
-        }
-        .btn-accent i { color: var(--fg); }
-
-        .btn-warn { border-color: #3a2828; }
-        .btn-warn:hover { background: #3a2828; border-color: #503030; }
-
-        .btn-sm {
-            padding: 6px 11px;
-            font-size: 12px;
-            border-radius: 10px;
-        }
-        .btn-sm i { font-size: 11px; }
-
-        /* === Panels === */
-        .panel {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            margin-bottom: 14px;
-            overflow: hidden;
-        }
-
-        .panel-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 20px;
-            border-bottom: 1px solid var(--border);
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .panel-label {
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            color: var(--muted);
-        }
-
-        .panel-label i { font-size: 13px; }
-
-        .panel-body { padding: 14px 20px; }
-
-        /* === Actions Grid === */
-        .actions-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
-            gap: 9px;
-        }
-
-        .section-divider {
-            grid-column: 1 / -1;
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1.2px;
-            color: #2a3544;
-            padding-top: 4px;
-        }
-
-        /* === Command Input === */
-        .cmd-row { display: flex; gap: 10px; }
-
-        .cmd-input {
-            flex: 1;
-            padding: 10px 15px;
-            background: var(--bg);
-            color: var(--fg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            font-family: var(--font-mono);
-            font-size: 13px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .cmd-input:focus { border-color: var(--accent); }
-        .cmd-input::placeholder { color: var(--border); }
-
-        /* === Table === */
-        .table-scroll {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-
-        thead th {
-            text-align: left;
-            padding: 9px 12px;
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            color: var(--muted);
-            border-bottom: 1px solid var(--border);
-            white-space: nowrap;
-            font-family: var(--font-ui);
-        }
-
-        tbody tr {
-            border-bottom: 1px solid rgba(37,49,62,0.45);
-            transition: background 0.12s;
-        }
-
-        tbody tr:hover { background: rgba(37,49,62,0.25); }
-
-        tbody td {
-            padding: 7px 12px;
-            white-space: nowrap;
-            font-family: var(--font-mono);
-            font-size: 12px;
-            color: var(--muted);
-        }
-
-        .rssi-cell {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            min-width: 130px;
-        }
-
-        .rssi-num {
-            font-weight: 500;
-            min-width: 34px;
-            color: var(--fg);
-        }
-
-        .rssi-track {
-            flex: 1;
-            height: 5px;
-            background: var(--bg);
-            border-radius: 3px;
-            overflow: hidden;
-            min-width: 55px;
-        }
-
-        .rssi-fill {
-            height: 100%;
-            background: var(--accent);
-            border-radius: 3px;
-            transition: width 0.3s ease;
-        }
-
-        .wps-tag {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 2px 8px;
-            background: rgba(107,130,153,0.12);
-            border: 1px solid rgba(107,130,153,0.2);
-            border-radius: 6px;
-            font-size: 10px;
-            color: var(--accent);
-            font-weight: 500;
-            font-family: var(--font-ui);
-        }
-
-        .wps-tag i { font-size: 8px; }
-
-        .ap-counter {
-            font-family: var(--font-mono);
-            font-size: 12px;
-            color: var(--muted);
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 36px 16px;
-            color: #2a3544;
-            font-size: 13px;
-            font-family: var(--font-ui);
-        }
-
-        .empty-state i {
-            display: block;
-            font-size: 26px;
-            margin-bottom: 10px;
-        }
-
-        /* === Console === */
-        .console-box {
-            background: var(--console-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 12px 14px;
-            height: 250px;
-            overflow-y: auto;
-            font-family: var(--font-mono);
-            font-size: 12px;
-            line-height: 1.75;
-            color: #5a7088;
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
-
-        .cline { }
-
-        .cline.cmd-line {
-            color: var(--fg);
-        }
-
-        .cline.cmd-line::before {
-            content: '> ';
-            color: var(--accent);
-        }
-
-        .cline.err-line {
-            color: #7a4a4a;
-        }
-
-        /* === Warning === */
-        .warn-banner {
-            display: none;
-            padding: 14px 18px;
-            background: #1e180e;
-            border: 1px solid #332a15;
-            border-radius: var(--radius);
-            margin-bottom: 14px;
-            font-size: 13px;
-            color: #c4a54a;
-            align-items: flex-start;
-            gap: 12px;
-            line-height: 1.6;
-        }
-
-        .warn-banner.show { display: flex; }
-
-        .warn-banner i {
-            font-size: 18px;
-            flex-shrink: 0;
-            margin-top: 2px;
-        }
-
-        .warn-banner strong { color: #d4b85a; }
-
-        /* === Toast === */
-        .toast-area {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            pointer-events: none;
-        }
-
-        .toast {
-            padding: 10px 16px;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            font-size: 13px;
-            color: var(--fg);
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            box-shadow: 0 8px 28px rgba(0,0,0,0.5);
-            animation: tIn 0.28s ease;
-            pointer-events: auto;
-        }
-
-        .toast.out { animation: tOut 0.28s ease forwards; }
-        .toast i { color: var(--accent); font-size: 14px; flex-shrink: 0; }
-
-        @keyframes tIn { from { opacity: 0; transform: translateY(14px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        @keyframes tOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(14px) scale(0.96); } }
-
-        /* === Footer === */
-        footer {
-            text-align: center;
-            padding: 18px 16px 24px;
-            font-size: 12px;
-            color: #1e2a36;
-        }
-
-        footer span { color: var(--muted); }
-
-        /* === Responsive === */
-        @media (max-width: 640px) {
-            .container { padding: 10px 8px; }
-            header { padding: 12px 14px; }
-            .header-title { font-size: 15px; }
-            .actions-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); gap: 7px; }
-            .btn { padding: 9px 12px; font-size: 12px; }
-            .panel-body { padding: 10px 12px; }
-            .console-box { height: 190px; font-size: 11px; }
-            .panel-head { padding: 10px 14px; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after {
-                animation-duration: 0.01ms !important;
-                transition-duration: 0.01ms !important;
-            }
-        }
+        @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
     </style>
 </head>
 <body>
-    <div class="container">
 
-        <!-- Баннер предупреждения о неподдерживаемом браузере -->
-        <div class="warn-banner" id="warnBanner" role="alert">
-            <i class="fa-solid fa-triangle-exclamation"></i>
+    <header>
+        <div class="h-left">
+            <div class="h-icon"><i class="fa-solid fa-microchip"></i></div>
             <div>
-                <strong>WebSerial API не поддерживается вашим браузером.</strong><br>
-                Для работы панели управления используйте <strong>Google Chrome</strong> или <strong>Microsoft Edge</strong> версии 89 и выше.
+                <div class="h-title">ESP32 Marauder</div>
+                <div class="h-sub">Serial Terminal</div>
             </div>
         </div>
+        <div class="h-right">
+            <div class="status">
+                <div class="dot" id="dot"></div>
+                <span class="status-txt" id="stxt">disconnected</span>
+            </div>
+            <button class="conn-btn" id="connBtn" aria-label="Connect">
+                <i class="fa-solid fa-plug"></i>
+                <span id="connTxt">connect</span>
+            </button>
+        </div>
+    </header>
 
-        <!-- Шапка -->
-        <header>
-            <div class="header-left">
-                <div class="header-icon"><i class="fa-solid fa-microchip"></i></div>
-                <div>
-                    <div class="header-title">ESP32 Marauder</div>
-                    <div class="header-sub">CONTROL PANEL</div>
-                </div>
-            </div>
-            <div class="header-right">
-                <div class="status-indicator">
-                    <div class="status-dot" id="statusDot"></div>
-                    <span class="status-label" id="statusLabel">Disconnected</span>
-                </div>
-                <button class="btn btn-accent" id="connectBtn" aria-label="Подключиться к устройству">
-                    <i class="fa-solid fa-plug"></i>
-                    <span id="connectBtnText">Connect</span>
-                </button>
-            </div>
-        </header>
-
-        <!-- Быстрые действия -->
-        <section class="panel" aria-label="Быстрые действия">
-            <div class="panel-head">
-                <div class="panel-label"><i class="fa-solid fa-bolt"></i> Quick Actions</div>
-            </div>
-            <div class="panel-body">
-                <div class="actions-grid" id="actionsGrid">
-                    <div class="section-divider">Wi-Fi Scanning</div>
-                    <button class="btn" data-cmd="scanap" data-action>
-                        <i class="fa-solid fa-wifi"></i> Scan APs
-                    </button>
-                    <button class="btn" data-cmd="stopscan" data-action>
-                        <i class="fa-solid fa-stop"></i> Stop Scan
-                    </button>
-                    <button class="btn" data-cmd="clearlist -a" data-action>
-                        <i class="fa-solid fa-trash-can"></i> Clear AP List
-                    </button>
-
-                    <div class="section-divider">BLE Spam</div>
-                    <button class="btn" data-cmd="blespam -t apple" data-action>
-                        <i class="fa-brands fa-apple"></i> Apple
-                    </button>
-                    <button class="btn" data-cmd="blespam -t google" data-action>
-                        <i class="fa-brands fa-google"></i> Google
-                    </button>
-                    <button class="btn" data-cmd="blespam -t samsung" data-action>
-                        <i class="fa-solid fa-mobile-screen"></i> Samsung
-                    </button>
-                    <button class="btn" data-cmd="blespam -t windows" data-action>
-                        <i class="fa-brands fa-windows"></i> Windows
-                    </button>
-                    <button class="btn" data-cmd="blespam -t all" data-action>
-                        <i class="fa-solid fa-broadcast-tower"></i> All
-                    </button>
-                    <button class="btn" data-cmd="stop" data-action>
-                        <i class="fa-solid fa-hand"></i> Stop BLE
-                    </button>
-
-                    <div class="section-divider">Attacks</div>
-                    <button class="btn btn-warn" id="btnDeauth" data-action>
-                        <i class="fa-solid fa-ban"></i> Deauth
-                    </button>
-                    <button class="btn btn-warn" id="btnBeacon" data-action>
-                        <i class="fa-solid fa-tower-broadcast"></i> Beacon Spam
-                    </button>
-
-                    <div class="section-divider">System</div>
-                    <button class="btn btn-warn" data-cmd="reboot" data-action>
-                        <i class="fa-solid fa-power-off"></i> Reboot
-                    </button>
-                </div>
-            </div>
-        </section>
-
-        <!-- Командная строка -->
-        <section class="panel" aria-label="Командная строка">
-            <div class="panel-head">
-                <div class="panel-label"><i class="fa-solid fa-terminal"></i> Command Line</div>
-            </div>
-            <div class="panel-body">
-                <div class="cmd-row">
-                    <input type="text" class="cmd-input" id="cmdInput"
-                           placeholder="Enter any Marauder command..."
-                           autocomplete="off" spellcheck="false"
-                           aria-label="Поле ввода команды">
-                    <button class="btn btn-accent" id="sendBtn" aria-label="Отправить команду">
-                        <i class="fa-solid fa-paper-plane"></i> Send
-                    </button>
-                </div>
-            </div>
-        </section>
-
-        <!-- Таблица Wi-Fi сетей -->
-        <section class="panel" aria-label="Найденные Wi-Fi сети">
-            <div class="panel-head">
-                <div class="panel-label"><i class="fa-solid fa-table-list"></i> Wi-Fi Networks</div>
-                <div style="display:flex;align-items:center;gap:12px;">
-                    <span class="ap-counter" id="apCounter">0 found</span>
-                    <button class="btn btn-sm" id="clearTableBtn" aria-label="Очистить таблицу сетей">
-                        <i class="fa-solid fa-eraser"></i> Clear
-                    </button>
-                </div>
-            </div>
-            <div class="table-scroll">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Signal</th>
-                            <th>Ch</th>
-                            <th>BSSID</th>
-                            <th>ESSID</th>
-                            <th>WPS</th>
-                        </tr>
-                    </thead>
-                    <tbody id="apBody">
-                        <tr><td colspan="5" class="empty-state">
-                            <i class="fa-solid fa-satellite-dish"></i>
-                            No networks scanned yet. Press "Scan APs" to begin.
-                        </td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- Лог-консоль -->
-        <section class="panel" aria-label="Консоль вывода">
-            <div class="panel-head">
-                <div class="panel-label"><i class="fa-solid fa-scroll"></i> Console Output</div>
-                <button class="btn btn-sm" id="clearConsoleBtn" aria-label="Очистить консоль">
-                    <i class="fa-solid fa-eraser"></i> Clear
-                </button>
-            </div>
-            <div class="panel-body">
-                <div class="console-box" id="consoleBox" role="log" aria-live="polite" aria-label="Вывод логов устройства"></div>
-            </div>
-        </section>
-
-        <!-- Подвал -->
-        <footer>
-            Requires <span>Google Chrome</span> or <span>Microsoft Edge</span> (v89+) with WebSerial API support.
-        </footer>
+    <div class="warn" id="warn" role="alert">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <div><strong>WebSerial API not supported.</strong><br>Use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> v89+.</div>
     </div>
 
-    <!-- Контейнер для уведомлений -->
-    <div class="toast-area" id="toastArea" aria-live="polite"></div>
+    <div class="terminal" id="terminal">
+        <div class="output" id="output"></div>
+        <div class="input-wrap">
+            <div class="autocomplete" id="acList"></div>
+            <div class="input-line">
+                <span class="prompt" id="promptSym">x</span>
+                <div class="ghost" id="ghostWrap">
+                    <span class="ghost-text" id="ghostText"></span>
+                </div>
+                <input type="text" class="term-input" id="termInput"
+                       placeholder="type a command..."
+                       autocomplete="off" autocapitalize="off" spellcheck="false"
+                       aria-label="Terminal input" aria-autocomplete="list">
+            </div>
+        </div>
+    </div>
+
+    <footer>requires <span>chrome</span> or <span>edge</span> (v89+) with webserial api</footer>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
 
     <script>
     (function() {
         'use strict';
 
-        /* ===================== Элементы ===================== */
-        const connectBtn      = document.getElementById('connectBtn');
-        const connectBtnText  = document.getElementById('connectBtnText');
-        const statusDot       = document.getElementById('statusDot');
-        const statusLabel     = document.getElementById('statusLabel');
-        const cmdInput        = document.getElementById('cmdInput');
-        const sendBtn         = document.getElementById('sendBtn');
-        const consoleBox      = document.getElementById('consoleBox');
-        const apBody          = document.getElementById('apBody');
-        const apCounter       = document.getElementById('apCounter');
-        const clearTableBtn   = document.getElementById('clearTableBtn');
-        const clearConsoleBtn = document.getElementById('clearConsoleBtn');
-        const warnBanner      = document.getElementById('warnBanner');
-        const toastArea       = document.getElementById('toastArea');
-        const btnDeauth       = document.getElementById('btnDeauth');
-        const btnBeacon       = document.getElementById('btnBeacon');
+        /* === DOM === */
+        var connBtn   = document.getElementById('connBtn');
+        var connTxt   = document.getElementById('connTxt');
+        var dot       = document.getElementById('dot');
+        var stxt      = document.getElementById('stxt');
+        var output    = document.getElementById('output');
+        var termInput = document.getElementById('termInput');
+        var promptSym = document.getElementById('promptSym');
+        var warn      = document.getElementById('warn');
+        var toasts    = document.getElementById('toasts');
+        var terminal  = document.getElementById('terminal');
+        var acList    = document.getElementById('acList');
+        var ghostWrap = document.getElementById('ghostWrap');
+        var ghostText = document.getElementById('ghostText');
 
-        /* ===================== Состояние ===================== */
-        let port          = null;
-        let reader        = null;
-        let isConnected   = false;
-        let lineBuffer    = '';
-        let apList        = [];    // Массив найденных сетей
-        let lastBSSID     = null;  // Последний обработанный BSSID для ассоциации WPS
-        let selectedAP    = null;  // Выбранная сеть для деаутентификации
+        /* === State === */
+        var port = null, reader = null, connected = false;
+        var buf = '';
+        var cmdHistory = [];
+        var histIdx = -1;
+        var MAX_LINES = 5000;
+        var acIdx = -1;          // Индекс выбранного пункта в выпадающем списке
+        var acVisible = false;    // Показан ли список
+        var typingQueue = [];     // Очередь строк для анимированного вывода
+        var isTyping = false;     // Идёт ли сейчас анимация
 
-        /* ===================== Проверка WebSerial ===================== */
+        /* === Словарь команд Marauder ===
+         * Каждая запись: { cmd, args, desc }
+         * cmd — базовая команда
+         * args — аргументы/флаги, по которым тоже ищем
+         * desc — краткое описание для выпадающего списка
+         */
+        var COMMANDS = [
+            /* Сканирование */
+            { cmd: 'scanap', args: '', desc: 'Scan access points' },
+            { cmd: 'scansta', args: '', desc: 'Scan stations' },
+            { cmd: 'scanall', args: '', desc: 'Scan APs and stations' },
+            { cmd: 'stopscan', args: '-f', desc: 'Stop scan (-f force)' },
+            { cmd: 'sigmon', args: '', desc: 'Signal monitor' },
+            { cmd: 'pingscan', args: '', desc: 'Ping scan' },
+            { cmd: 'arpscan', args: '-f', desc: 'ARP scan (-f fast)' },
+            { cmd: 'portscan', args: '-a -t', desc: 'Port scan (-a aggressive)' },
+            { cmd: 'wardrive', args: '-s', desc: 'WiFi wardrive (-s save)' },
+            { cmd: 'packetcount', args: '', desc: 'Show packet count' },
+
+            /* Сниффинг */
+            { cmd: 'sniffraw', args: '', desc: 'Sniff raw packets' },
+            { cmd: 'sniffbeacon', args: '', desc: 'Sniff beacons' },
+            { cmd: 'sniffprobe', args: '', desc: 'Sniff probe requests' },
+            { cmd: 'sniffdeauth', args: '', desc: 'Sniff deauth frames' },
+            { cmd: 'sniffpwn', args: '', desc: 'Sniff Pwnagotchi' },
+            { cmd: 'sniffpinescan', args: '', desc: 'Sniff WiFi PineAP' },
+            { cmd: 'sniffmultissid', args: '', desc: 'Sniff multi-SSID' },
+            { cmd: 'sniffesp', args: '', desc: 'Sniff ESP packets' },
+            { cmd: 'sniffpmkid', args: '-c -d -l', desc: 'Sniff PMKID (-c ch / -d detect / -l loop)' },
+            { cmd: 'sniffbt', args: '-t airtag -t flipper', desc: 'Sniff BT (airtag/flipper)' },
+            { cmd: 'sniffskim', args: '', desc: 'Sniff skimmers' },
+
+            /* Атаки */
+            { cmd: 'attack', args: '-t beacon -l -r -a -t deauth -c -s -d -t probe -t rickroll -t badmsg -c -t sleep -c', desc: 'Launch attack' },
+            { cmd: 'blespam', args: '-t apple -t google -t samsung -t windows -t flipper -t all', desc: 'BLE spam attack' },
+            { cmd: 'stop', args: '', desc: 'Stop active attack' },
+
+            /* Списки и выбор */
+            { cmd: 'list', args: '-a -s -c -t -i -p', desc: 'List (a/s/c/t/i/p)' },
+            { cmd: 'select', args: '-a -s -c -f', desc: 'Select targets' },
+            { cmd: 'clearlist', args: '-a -c -s', desc: 'Clear list (a/c/s)' },
+
+            /* SSID */
+            { cmd: 'ssid', args: '-a -g -n -r', desc: 'Manage SSID list' },
+
+            /* Сохранение/загрузка */
+            { cmd: 'save', args: '-a -s', desc: 'Save APs/stations' },
+            { cmd: 'load', args: '-a -s', desc: 'Load APs/stations' },
+
+            /* Прочее */
+            { cmd: 'channel', args: '-s', desc: 'Set channel' },
+            { cmd: 'settings', args: '-s -r', desc: 'Device settings' },
+            { cmd: 'led', args: '-s -p rainbow', desc: 'LED control' },
+            { cmd: 'gps', args: '-g fix -g sat -g lon -g lat -g alt -g nmea -n', desc: 'GPS data' },
+            { cmd: 'gpsdata', args: '', desc: 'GPS data dump' },
+            { cmd: 'nmea', args: '', desc: 'Raw NMEA output' },
+            { cmd: 'evilportal', args: '-c start -w sethtml', desc: 'Evil portal' },
+            { cmd: 'karma', args: '-p', desc: 'Karma attack' },
+            { cmd: 'join', args: '-a -p -s', desc: 'Join network' },
+            { cmd: 'spoofat', args: '-t', desc: 'Spoof access point' },
+            { cmd: 'info', args: '-a', desc: 'AP info' },
+            { cmd: 'ls', args: '', desc: 'List files' },
+            { cmd: 'update', args: '-s -w', desc: 'Update firmware' },
+            { cmd: 'reboot', args: '', desc: 'Reboot device' },
+            { cmd: 'help', args: '', desc: 'Show help' },
+        ];
+
+        /* === WebSerial check === */
         if (!('serial' in navigator)) {
-            warnBanner.classList.add('show');
-            connectBtn.disabled = true;
+            warn.classList.add('show');
+            connBtn.disabled = true;
+            termInput.disabled = true;
         }
 
-        /* ===================== Подключение / Отключение ===================== */
-        connectBtn.addEventListener('click', function() {
-            if (isConnected) {
-                disconnect();
+        /* === Welcome === */
+        printLine('ESP32 Marauder Serial Terminal', 'info');
+        printLine('Connect to a device to begin.', 'info');
+        printLine('');
+
+        /* === Click to focus === */
+        terminal.addEventListener('click', function() { termInput.focus(); });
+
+        /* === Подсчёт отступа для ghost-текста === */
+        function updateGhostOffset() {
+            var p = promptSym;
+            var pRect = p.getBoundingClientRect();
+            var wRect = ghostWrap.getBoundingClientRect();
+            ghostWrap.style.left = (pRect.right - wRect.left) + 'px';
+        }
+
+        /* === Поиск автодополнений === */
+        function findCompletions(input) {
+            var q = input.trim().toLowerCase();
+            if (!q) return [];
+
+            /* Разбиваем ввод на слова */
+            var words = q.split(/\s+/);
+            var results = [];
+
+            for (var i = 0; i < COMMANDS.length; i++) {
+                var c = COMMANDS[i];
+                var full = c.cmd + ' ' + c.args;
+                var fullLower = full.toLowerCase();
+
+                /* Строгое совпадение начала — для первого слова */
+                if (words.length === 1) {
+                    if (c.cmd.toLowerCase().indexOf(q) === 0) {
+                        results.push({ text: c.cmd, desc: c.desc, match: c.cmd });
+                    }
+                }
+                /* Множество слов — ищем совпадение по полному вводу */
+                else if (fullLower.indexOf(q) === 0) {
+                    results.push({ text: full, desc: c.desc, match: full });
+                }
+            }
+
+            return results;
+        }
+
+        /* === Обновление inline-подсказки (ghost text) === */
+        function updateGhost() {
+            var val = termInput.value;
+            var completions = findCompletions(val);
+
+            if (completions.length === 1 && val.length > 0) {
+                var match = completions[0].match;
+                var suffix = match.substring(val.length);
+                ghostText.textContent = suffix;
+                updateGhostOffset();
+                ghostWrap.style.display = 'block';
             } else {
-                connect();
+                ghostWrap.style.display = 'none';
+                ghostText.textContent = '';
+            }
+        }
+
+        /* === Рендер выпадающего списка === */
+        function renderAC(completions) {
+            if (completions.length <= 1) {
+                hideAC();
+                return;
+            }
+
+            acList.innerHTML = '';
+            for (var i = 0; i < completions.length; i++) {
+                var item = document.createElement('div');
+                item.className = 'ac-item';
+                if (i === acIdx) item.classList.add('active');
+                item.dataset.idx = i;
+                item.innerHTML = '<span class="ac-cmd">' + esc(completions[i].match) + '</span>' +
+                    '<span class="ac-desc">' + esc(completions[i].desc) + '</span>';
+                acList.appendChild(item);
+            }
+
+            acList.classList.add('show');
+            acVisible = true;
+
+            /* Прокрутка к активному элементу */
+            var active = acList.querySelector('.active');
+            if (active) active.scrollIntoView({ block: 'nearest' });
+        }
+
+        function hideAC() {
+            acList.classList.remove('show');
+            acList.innerHTML = '';
+            acVisible = false;
+            acIdx = -1;
+        }
+
+        /* === Клик по пункту выпадающего списка === */
+        acList.addEventListener('mousedown', function(e) {
+            e.preventDefault(); // Не даём фокус уйти с input
+            var item = e.target.closest('.ac-item');
+            if (!item) return;
+            var idx = parseInt(item.dataset.idx, 10);
+            var completions = findCompletions(termInput.value);
+            if (completions[idx]) {
+                termInput.value = completions[idx].match;
+                hideAC();
+                updateGhost();
             }
         });
 
-        async function connect() {
+        /* === Apply completion (Tab или Enter по активному пункту) === */
+        function applyCompletion() {
+            var val = termInput.value;
+            var completions = findCompletions(val);
+
+            /* Если есть активный пункт в выпадающем списке — берём его */
+            if (acVisible && acIdx >= 0 && completions[acIdx]) {
+                termInput.value = completions[acIdx].match;
+                hideAC();
+                updateGhost();
+                return true;
+            }
+
+            /* Если только одна inline-подсказка — применяем её */
+            if (completions.length === 1 && val.length > 0) {
+                termInput.value = completions[0].match;
+                hideAC();
+                updateGhost();
+                return true;
+            }
+
+            return false;
+        }
+
+        /* === Подсветка последнего слова в input ===
+         * Если текущий ввод (без последнего слова) полностью совпадает
+         * с какой-то командой — подсвечиваем последнее слово,
+         * т.к. оно, скорее всего, аргумент.
+         */
+        function highlightInput() {
+            var val = termInput.value;
+            if (!val) return;
+
+            var words = val.split(/\s+/);
+            if (words.length < 2) return;
+
+            var prefix = words.slice(0, -1).join(' ').toLowerCase();
+            var lastWord = words[words.length - 1].toLowerCase();
+
+            for (var i = 0; i < COMMANDS.length; i++) {
+                if (COMMANDS[i].cmd.toLowerCase() === prefix) {
+                    var args = COMMANDS[i].args.toLowerCase().split(/\s+/);
+                    for (var j = 0; j < args.length; j++) {
+                        if (args[j].indexOf(lastWord) === 0 && args[j] !== lastWord) {
+                            /* Нашли частичное совпадение аргумента — показываем ghost */
+                            ghostText.textContent = args[j].substring(lastWord.length);
+                            updateGhostOffset();
+                            ghostWrap.style.display = 'block';
+                            return;
+                        }
+                    }
+                }
+            }
+
+            /* Если не нашли совпадение аргумента — проверяем обычные дополнения */
+            updateGhost();
+        }
+
+        /* === Input events === */
+        termInput.addEventListener('input', function() {
+            histIdx = -1;
+            highlightInput();
+            var completions = findCompletions(termInput.value);
+            acIdx = -1;
+            if (completions.length > 1 && termInput.value.trim().length > 0) {
+                renderAC(completions);
+            } else {
+                hideAC();
+            }
+        });
+
+        termInput.addEventListener('keydown', function(e) {
+            /* Tab — автодополнение */
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                applyCompletion();
+                return;
+            }
+
+            /* Enter — если список открыт и есть активный пункт, применяем */
+            if (e.key === 'Enter') {
+                if (acVisible && acIdx >= 0) {
+                    if (applyCompletion()) return; // Не отправляем, только дополнили
+                }
+                var val = termInput.value;
+                if (val.trim()) {
+                    cmdHistory.unshift(val);
+                    if (cmdHistory.length > 200) cmdHistory.pop();
+                    sendCmd(val);
+                    termInput.value = '';
+                }
+                histIdx = -1;
+                hideAC();
+                ghostWrap.style.display = 'none';
+                return;
+            }
+
+            /* Стрелка вверх — навигация по списку или история */
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (acVisible && completions_cache().length > 0) {
+                    var items = completions_cache();
+                    if (acIdx < items.length - 1) acIdx++;
+                    renderAC(items);
+                    return;
+                }
+                if (cmdHistory.length === 0) return;
+                hideAC();
+                if (histIdx < cmdHistory.length - 1) histIdx++;
+                termInput.value = cmdHistory[histIdx];
+                var len = termInput.value.length;
+                termInput.setSelectionRange(len, len);
+                ghostWrap.style.display = 'none';
+                return;
+            }
+
+            /* Стрелка вниз */
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (acVisible) {
+                    var items2 = completions_cache();
+                    if (acIdx > 0) {
+                        acIdx--;
+                        renderAC(items2);
+                    } else {
+                        acIdx = -1;
+                        renderAC(items2);
+                    }
+                    return;
+                }
+                if (histIdx <= 0) { histIdx = -1; termInput.value = ''; return; }
+                histIdx--;
+                termInput.value = cmdHistory[histIdx];
+                var len2 = termInput.value.length;
+                termInput.setSelectionRange(len2, len2);
+                ghostWrap.style.display = 'none';
+                return;
+            }
+
+            /* Escape — закрыть список */
+            if (e.key === 'Escape') {
+                hideAC();
+                ghostWrap.style.display = 'none';
+                return;
+            }
+
+            /* Ctrl+L — очистка */
+            if (e.key === 'l' && e.ctrlKey) {
+                e.preventDefault();
+                output.innerHTML = '';
+                return;
+            }
+        });
+
+        /* Кэш дополнений для навигации стрелками */
+        function completions_cache() {
+            return findCompletions(termInput.value);
+        }
+
+        /* Скрытие списка при потере фокуса */
+        termInput.addEventListener('blur', function() {
+            setTimeout(function() { hideAC(); ghostWrap.style.display = 'none'; }, 150);
+        });
+
+        /* === Connect / Disconnect === */
+        connBtn.addEventListener('click', function() {
+            if (connected) doDisconnect(); else doConnect();
+        });
+
+        async function doConnect() {
             try {
                 port = await navigator.serial.requestPort();
                 await port.open({ baudRate: 115200 });
-                isConnected = true;
+                connected = true;
                 syncUI();
-                toast('Device connected');
+                printLine('Connected at 115200 baud.', 'info');
+                printLine('');
+                termInput.focus();
                 readLoop();
-            } catch (err) {
-                // NotFound — пользователь отменил выбор порта, не показываем ошибку
-                if (err.name !== 'NotFoundError') {
-                    toast('Connection failed: ' + err.message);
-                }
+            } catch(e) {
+                if (e.name !== 'NotFoundError') toast('Connection failed: ' + e.message);
             }
         }
 
-        async function disconnect() {
-            isConnected = false;
-
-            // Отменяем чтение — это прерывает цикл readLoop
-            if (reader) {
-                try { await reader.cancel(); } catch (_) {}
-            }
-
-            // Даём потокам время на завершение
-            await delay(180);
-
-            try { if (port) await port.close(); } catch (_) {}
-
-            port       = null;
-            reader     = null;
-            lineBuffer = '';
+        async function doDisconnect() {
+            connected = false;
+            if (reader) { try { await reader.cancel(); } catch(_) {} }
+            await wait(200);
+            try { if (port) await port.close(); } catch(_) {}
+            port = null; reader = null; buf = '';
             syncUI();
-            toast('Disconnected');
+            printLine('');
+            printLine('Disconnected.', 'info');
         }
 
-        /* Обработка неожиданного отключения устройства */
         navigator.serial.addEventListener('disconnect', function(e) {
-            if (isConnected && port && e.target === port) {
-                isConnected = false;
-                reader = null;
-                port = null;
-                lineBuffer = '';
+            if (connected && port && e.target === port) {
+                connected = false; reader = null; port = null; buf = '';
                 syncUI();
-                toast('Device disconnected unexpectedly');
+                printLine('');
+                printLine('Device disconnected.', 'info');
             }
         });
 
-        /* ===================== Чтение из порта ===================== */
+        /* === Read === */
         async function readLoop() {
-            const decoder = new TextDecoderStream();
-            const pipeDone = port.readable.pipeTo(decoder.writable);
-            reader = decoder.readable.getReader();
-
+            var dec = new TextDecoderStream();
+            var pipe = port.readable.pipeTo(dec.writable);
+            reader = dec.readable.getReader();
             try {
                 while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
-                    if (value) processData(value);
+                    var r = await reader.read();
+                    if (r.done) break;
+                    if (r.value) handleChunk(r.value);
                 }
-            } catch (err) {
-                if (isConnected) {
-                    logLine('[Read error] ' + err.message, 'err');
-                }
+            } catch(e) {
+                if (connected) printLine('[read error] ' + e.message, 'err');
             } finally {
-                try { reader.releaseLock(); } catch (_) {}
+                try { reader.releaseLock(); } catch(_) {}
                 reader = null;
             }
-
-            try { await pipeDone; } catch (_) {}
-
-            // Если мы всё ещё считаем себя подключёнными — это обрыв
-            if (isConnected) {
-                isConnected = false;
-                syncUI();
-                toast('Connection lost');
+            try { await pipe; } catch(_) {}
+            if (connected) {
+                connected = false; syncUI();
+                printLine('');
+                printLine('Connection lost.', 'info');
             }
         }
 
-        /* ===================== Запись в порт ===================== */
-        async function sendCommand(cmd) {
-            if (!isConnected || !port) {
-                toast('Not connected');
-                return false;
-            }
-            const enc = new TextEncoder();
+        /* === Write === */
+        async function sendCmd(cmd) {
+            if (!connected || !port) { toast('Not connected'); return false; }
             try {
-                const w = port.writable.getWriter();
-                await w.write(enc.encode(cmd + '\r\n'));
+                var w = port.writable.getWriter();
+                await w.write(new TextEncoder().encode(cmd + '\r\n'));
                 w.releaseLock();
-                logLine(cmd, 'cmd');
+                printLine(cmd, 'cmd');
                 return true;
-            } catch (err) {
-                toast('Send error: ' + err.message);
-                return false;
-            }
+            } catch(e) { toast('Send error: ' + e.message); return false; }
         }
 
-        /* ===================== Обработка потоковых данных ===================== */
-        function processData(chunk) {
-            lineBuffer += chunk;
-
-            var lines = lineBuffer.split('\n');
-            // Последний фрагмент может быть неполным — оставляем в буфере
-            lineBuffer = lines.pop() || '';
-
+        /* === Data === */
+        function handleChunk(chunk) {
+            buf += chunk;
+            var lines = buf.split('\n');
+            buf = lines.pop() || '';
             for (var i = 0; i < lines.length; i++) {
-                var raw = lines[i].replace(/\r$/, '');
-                if (raw.length > 0) {
-                    logLine(raw, 'data');
-                    parseMarauderLine(raw);
-                }
+                var s = lines[i].replace(/\r$/, '');
+                if (s.length) queueLine(s, 'data');
             }
         }
 
-        /* ===================== Парсинг строк Marauder ===================== */
-        /*
-         * Формат строки сети:
-         *   RSSI: -73 Ch: 2 BSSID: d8:0d:17:e1:87:0e ESSID: TP-Link_870E
-         *
-         * Формат WPS-указания (идёт отдельной строкой после сети):
-         *   TP-Link_870E: RXd WPS Configs
-         *   some_essid: WPS Configs
-         *
-         * Строки с префиксом ">" и прочие — просто логируются.
+        /* === Анимированный вывод ===
+         * Строки ставятся в очередь и выводятся посимвольно
+         * с минимальной задержкой для визуального эффекта,
+         * но достаточно быстро чтобы не тормозить.
          */
-        var AP_RE = /^RSSI:\s*(-?\d+)\s+Ch:\s*(\d+)\s+BSSID:\s*([0-9a-fA-F:]{17})\s+ESSID:\s*(.+)$/;
+        function queueLine(text, type) {
+            typingQueue.push({ text: text, type: type });
+            if (!isTyping) processQueue();
+        }
 
-        function parseMarauderLine(line) {
-            // Пытаемся распарсить строку AP
-            var m = line.match(AP_RE);
-            if (m) {
-                var rssi    = parseInt(m[1], 10);
-                var channel = parseInt(m[2], 10);
-                var bssid   = m[3].toLowerCase();
-                var essid   = m[4];
-
-                lastBSSID = bssid;
-
-                // Обновляем существующую или добавляем новую
-                var existing = findAP(bssid);
-                if (existing) {
-                    existing.rssi    = rssi;
-                    existing.channel = channel;
-                    existing.essid   = essid;
-                } else {
-                    apList.push({ rssi: rssi, channel: channel, bssid: bssid, essid: essid, wps: false });
-                }
-
-                // Сортировка по RSSI (убывание = сильнее сигнал сверху)
-                apList.sort(function(a, b) { return b.rssi - a.rssi; });
-                renderTable();
+        function processQueue() {
+            if (typingQueue.length === 0) {
+                isTyping = false;
                 return;
             }
 
-            // Проверяем WPS-указание
-            if (line.indexOf('WPS Configs') !== -1) {
-                // Пытаемся извлечь ESSID из строки: "ESSID: RXd WPS Configs" или "ESSID: WPS Configs"
-                var wpsM = line.match(/^(.+?):\s*(?:RXd\s+)?WPS Configs/);
-                if (wpsM) {
-                    var wpsEssid = wpsM[1].trim();
-                    var ap = apList.find(function(a) { return a.essid === wpsEssid; });
-                    if (ap) { ap.wps = true; renderTable(); return; }
-                }
-                // Fallback: ассоциация по последнему BSSID
-                if (lastBSSID) {
-                    var ap2 = findAP(lastBSSID);
-                    if (ap2) { ap2.wps = true; renderTable(); }
-                }
-            }
-        }
-
-        function findAP(bssid) {
-            for (var i = 0; i < apList.length; i++) {
-                if (apList[i].bssid === bssid) return apList[i];
-            }
-            return null;
-        }
-
-        /* ===================== Таблица сетей ===================== */
-        function renderTable() {
-            apCounter.textContent = apList.length + ' found';
-
-            if (apList.length === 0) {
-                apBody.innerHTML = '<tr><td colspan="5" class="empty-state">' +
-                    '<i class="fa-solid fa-satellite-dish"></i>' +
-                    'No networks scanned yet. Press "Scan APs" to begin.</td></tr>';
-                return;
-            }
-
-            var html = '';
-            for (var i = 0; i < apList.length; i++) {
-                var ap = apList[i];
-                // RSSI: -30 (отлично) → 100%, -90 (плохо) → 0%
-                var pct = Math.max(0, Math.min(100, ((ap.rssi + 90) / 60) * 100));
-                var isSelected = (selectedAP && selectedAP.bssid === ap.bssid);
-
-                html += '<tr data-bssid="' + esc(ap.bssid) + '"' +
-                    (isSelected ? ' style="background:rgba(107,130,153,0.08)"' : '') + '>';
-
-                // RSSI с полоской
-                html += '<td><div class="rssi-cell">' +
-                    '<span class="rssi-num">' + ap.rssi + '</span>' +
-                    '<div class="rssi-track"><div class="rssi-fill" style="width:' + pct.toFixed(1) + '%"></div></div>' +
-                    '</div></td>';
-
-                html += '<td>' + ap.channel + '</td>';
-                html += '<td>' + esc(ap.bssid) + '</td>';
-                html += '<td>' + esc(ap.essid) + '</td>';
-                html += '<td>' + (ap.wps
-                    ? '<span class="wps-tag"><i class="fa-solid fa-check"></i> WPS</span>'
-                    : '') + '</td>';
-
-                html += '</tr>';
-            }
-
-            apBody.innerHTML = html;
-
-            // Назначаем обработчики клика для выбора цели
-            var rows = apBody.querySelectorAll('tr[data-bssid]');
-            rows.forEach(function(row) {
-                row.style.cursor = 'pointer';
-                row.addEventListener('click', function() {
-                    var bssid = this.getAttribute('data-bssid');
-                    var ap = findAP(bssid);
-                    if (ap) {
-                        selectedAP = (selectedAP && selectedAP.bssid === bssid) ? null : ap;
-                        renderTable();
-                        if (selectedAP) {
-                            toast('Target selected: ' + ap.essid + ' (' + ap.bssid + ')');
-                        }
-                    }
-                });
+            isTyping = true;
+            var item = typingQueue.shift();
+            typeLine(item.text, item.type, function() {
+                processQueue();
             });
         }
 
-        function clearTable() {
-            apList = [];
-            lastBSSID = null;
-            selectedAP = null;
-            renderTable();
+        function typeLine(text, type, callback) {
+            var d = document.createElement('div');
+            d.className = 'line' + (type === 'cmd' ? ' cmd' : '') + (type === 'err' ? ' err' : '') + (type === 'info' ? ' info' : '');
+            d.classList.add('typing');
+            output.appendChild(d);
+
+            var idx = 0;
+            var len = text.length;
+            /* Скорость: 8мс на символ — быстро, но заметно */
+            var speed = 8;
+
+            /* Если строка длинная — ускоряем */
+            if (len > 80) speed = 3;
+            if (len > 150) speed = 1;
+
+            /* Пропускаем анимацию если пользователь скроллит вверх */
+            function step() {
+                if (idx < len) {
+                    /* Добавляем по несколько символов за тик для длинных строк */
+                    var batch = len > 100 ? 3 : 1;
+                    for (var b = 0; b < batch && idx < len; b++) {
+                        idx++;
+                    }
+                    d.textContent = text.substring(0, idx);
+                    output.scrollTop = output.scrollHeight;
+                    setTimeout(step, speed);
+                } else {
+                    d.classList.remove('typing');
+                    output.scrollTop = output.scrollHeight;
+                    callback();
+                }
+            }
+            step();
         }
 
-        clearTableBtn.addEventListener('click', clearTable);
-
-        /* ===================== Консоль ===================== */
-        var MAX_LINES = 2500;
-
-        function logLine(text, type) {
-            var div = document.createElement('div');
-            div.className = 'cline' + (type === 'cmd' ? ' cmd-line' : '') + (type === 'err' ? ' err-line' : '');
-            div.textContent = text;
-            consoleBox.appendChild(div);
-
-            // Ограничиваем количество строк
-            while (consoleBox.children.length > MAX_LINES) {
-                consoleBox.removeChild(consoleBox.firstChild);
-            }
-
-            // Автопрокрутка
-            consoleBox.scrollTop = consoleBox.scrollHeight;
+        /* === Прямой вывод (без анимации) для локальных сообщений === */
+        function printLine(text, type) {
+            var d = document.createElement('div');
+            d.className = 'line' + (type === 'cmd' ? ' cmd' : '') + (type === 'err' ? ' err' : '') + (type === 'info' ? ' info' : '');
+            d.textContent = text;
+            output.appendChild(d);
+            while (output.children.length > MAX_LINES) output.removeChild(output.firstChild);
+            output.scrollTop = output.scrollHeight;
         }
 
-        clearConsoleBtn.addEventListener('click', function() {
-            consoleBox.innerHTML = '';
-        });
-
-        /* ===================== Командная строка ===================== */
-        function handleSend() {
-            var val = cmdInput.value.trim();
-            if (val) {
-                sendCommand(val);
-                cmdInput.value = '';
-            }
-            cmdInput.focus();
-        }
-
-        sendBtn.addEventListener('click', handleSend);
-        cmdInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') handleSend();
-        });
-
-        /* ===================== Быстрые действия ===================== */
-        document.getElementById('actionsGrid').addEventListener('click', function(e) {
-            var btn = e.target.closest('button[data-cmd]');
-            if (btn) {
-                sendCommand(btn.getAttribute('data-cmd'));
-            }
-        });
-
-        /* Deauth: отправляет команду с выбранным BSSID или подсказку */
-        btnDeauth.addEventListener('click', function() {
-            if (!selectedAP) {
-                toast('Select a target network from the table first');
-                return;
-            }
-            sendCommand('deauth -t ' + selectedAP.bssid);
-        });
-
-        /* Beacon Spam: зарезервированная кнопка */
-        btnBeacon.addEventListener('click', function() {
-            toast('Beacon Spam — select a target or use command line');
-        });
-
-        /* ===================== Синхронизация UI ===================== */
+        /* === UI sync === */
         function syncUI() {
-            if (isConnected) {
-                statusDot.classList.add('on');
-                statusLabel.textContent = 'Connected';
-                connectBtnText.textContent = 'Disconnect';
-                connectBtn.querySelector('i').className = 'fa-solid fa-plug-circle-xmark';
+            if (connected) {
+                dot.classList.add('on');
+                stxt.textContent = 'connected';
+                connTxt.textContent = 'disconnect';
+                connBtn.querySelector('i').className = 'fa-solid fa-plug-circle-xmark';
+                promptSym.textContent = '>';
+                promptSym.style.color = 'var(--accent)';
             } else {
-                statusDot.classList.remove('on');
-                statusLabel.textContent = 'Disconnected';
-                connectBtnText.textContent = 'Connect';
-                connectBtn.querySelector('i').className = 'fa-solid fa-plug';
+                dot.classList.remove('on');
+                stxt.textContent = 'disconnected';
+                connTxt.textContent = 'connect';
+                connBtn.querySelector('i').className = 'fa-solid fa-plug';
+                promptSym.textContent = 'x';
+                promptSym.style.color = 'var(--border)';
             }
         }
 
-        /* ===================== Уведомления (Toast) ===================== */
+        /* === Toast === */
         function toast(msg) {
             var el = document.createElement('div');
             el.className = 'toast';
             el.innerHTML = '<i class="fa-solid fa-circle-info"></i> ' + esc(msg);
-            toastArea.appendChild(el);
-
-            setTimeout(function() {
-                el.classList.add('out');
-                setTimeout(function() { el.remove(); }, 300);
-            }, 3200);
+            toasts.appendChild(el);
+            setTimeout(function() { el.classList.add('out'); setTimeout(function() { el.remove(); }, 300); }, 3000);
         }
 
-        /* ===================== Утилиты ===================== */
-        function esc(str) {
-            var d = document.createElement('div');
-            d.textContent = str;
-            return d.innerHTML;
-        }
+        /* === Utils === */
+        function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        function wait(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
-        function delay(ms) {
-            return new Promise(function(r) { setTimeout(r, ms); });
-        }
+        termInput.focus();
 
     })();
     </script>
